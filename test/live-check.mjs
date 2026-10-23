@@ -27,7 +27,7 @@ for (const provider of ['codex', 'claude']) {
   console.log(provider + ': live aggregates and exports passed');
 }
 assert.equal((await fetch(base + '/api/report?provider=invalid')).status, 400);
-for (const route of ['/api/refresh', '/api/backup', '/api/pricing/refresh']) {
+for (const route of ['/api/refresh', '/api/backup', '/api/pricing/refresh', '/api/pricing/custom']) {
   const response = await fetch(base + route, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'https://example.invalid' }, body: '{}' });
   assert.equal(response.status, 403);
 }

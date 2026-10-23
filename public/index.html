@@ -20,7 +20,7 @@
     </nav>
     <div class="rail-bottom"><span class="local-light"></span> Runs on your machine<p>Usage metadata stays local.<br>Session logs are read only.</p><span class="version">TOKENAPP / V1.1</span></div>
   </aside>
-  <main id="overview">
+  <main id="overview" aria-busy="true">
     <header class="page-header">
       <div><div class="eyebrow">PERSONAL ANALYTICS <span>/</span> <span id="provider-caption">CHATGPT · CODEX</span></div><h1>Usage overview<span>.</span></h1><p class="subtitle">A clear view of the tokens behind your work.</p></div>
       <div class="header-actions"><span id="sync-status" class="sync-status" role="status">Connecting…</span><button id="refresh" class="button subtle" type="button">↻ Refresh</button></div>
@@ -44,7 +44,7 @@
       <article class="metric panel"><div class="metric-label">ACTIVE SESSIONS <span>◫</span></div><div id="session-count" class="metric-value">—</div><div id="call-count" class="metric-detail">— model calls</div><div class="metric-footer">With usage in this range</div></article>
     </section>
     <section class="cost-strip panel" aria-label="Estimated token cost"><div><div class="eyebrow">ESTIMATED TOKEN COST · USD</div><strong id="estimated-cost">—</strong><span id="cost-coverage">Fetch pricing to estimate this range.</span><p>At current standard API rates. Subscription charges and tool fees are excluded.</p></div><button id="fetch-pricing" class="button" type="button">Fetch pricing</button></section>
-    <details class="panel pricing-panel"><summary>Model pricing <span id="pricing-updated">Not fetched yet</span></summary><p id="pricing-basis">Prices are fetched from official OpenAI and Anthropic documentation. Your usage stays on this machine.</p><div class="table-scroll"><table><thead><tr><th>Model in this range</th><th class="numeric">Input</th><th class="numeric">Cached input</th><th class="numeric">Cache write</th><th class="numeric">Long cache write</th><th class="numeric">Output</th></tr></thead><tbody id="pricing-rows"></tbody></table></div><p class="pricing-source">USD per million tokens · <a id="pricing-source" target="_blank" rel="noreferrer">Official pricing source</a></p></details>
+    <details class="panel pricing-panel"><summary>Model pricing <span id="pricing-updated">Not fetched yet</span></summary><p id="pricing-basis">Prices are fetched from official OpenAI and Anthropic documentation. Your usage stays on this machine.</p><div class="table-scroll"><table><thead><tr><th>Model in this range</th><th class="numeric">Input</th><th class="numeric">Cached input</th><th class="numeric">Cache write</th><th class="numeric">Long cache write</th><th class="numeric">Output</th><th>Status</th></tr></thead><tbody id="pricing-rows"></tbody></table></div><p class="pricing-source">USD per million tokens · <a id="pricing-source" target="_blank" rel="noreferrer">Official pricing source</a></p></details>
     <section class="activity-grid">
       <article class="panel activity-panel">
         <div class="section-heading"><div><div class="eyebrow">THE BIG PICTURE</div><h2>Token activity</h2></div><div class="chart-controls"><select id="chart-metric" aria-label="Chart token category"><option value="total_tokens">All tokens</option><option value="input_tokens">Input</option><option value="output_tokens">Output</option></select><div class="segmented" role="group" aria-label="Activity grouping"><button id="daily" class="selected" type="button">Daily</button><button id="weekly" type="button">Weekly</button></div></div></div>
@@ -66,6 +66,24 @@
   <dialog id="session-dialog" aria-labelledby="detail-title">
     <div class="dialog-header"><div><div class="eyebrow">SESSION DETAIL · SELECTED RANGE</div><h2 id="detail-title"></h2></div><button id="close-dialog" class="icon-button" type="button" aria-label="Close session detail">×</button></div>
     <div id="detail-content"></div>
+  </dialog>
+  <dialog id="rate-dialog" aria-labelledby="rate-title">
+    <form id="rate-form">
+      <div class="dialog-header"><h2 id="rate-title">Custom pricing</h2><button id="close-rate" class="icon-button" type="button" aria-label="Close pricing">×</button></div>
+      <p class="rate-note">Enter USD per million tokens. These are your estimates, saved on this machine and labelled Custom. Leave optional fields blank when the rate is unknown. Enter 0 only when there is no token charge.</p>
+      <div class="rate-fields">
+        <label>Input<input id="rate-input" type="number" min="0" max="1000000000" step="any" required></label>
+        <label>Cached input (optional)<input id="rate-cached" type="number" min="0" max="1000000000" step="any"></label>
+        <label>Output<input id="rate-output" type="number" min="0" max="1000000000" step="any" required></label>
+        <label>Cache write (optional)<input id="rate-write" type="number" min="0" max="1000000000" step="any"></label>
+        <label>Long cache write (optional)<input id="rate-writeLong" type="number" min="0" max="1000000000" step="any"></label>
+      </div>
+      <p id="rate-error" class="rate-error" role="alert"></p>
+      <div class="rate-actions"><button id="reset-rate" class="button" type="button" hidden>Remove custom rate</button><button class="button" type="submit">Save rate</button></div>
+    </form>
+  </dialog>
+  <dialog id="loading-overlay" class="loading-overlay" aria-label="Loading" aria-describedby="loading-text">
+    <span class="loading-spinner" aria-hidden="true"></span><p id="loading-text" role="status" aria-live="polite">Loading your dashboard…</p>
   </dialog>
 </body>
 </html>

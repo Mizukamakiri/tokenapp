@@ -1,10 +1,12 @@
 {
   "name": "tokenapp",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "type": "module",
   "description": "A local Codex and Claude Code token usage and cost dashboard",
-  "engines": { "node": ">=24.0.0" },
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "start": "node server.mjs",
     "test": "node --test test/*.test.mjs"

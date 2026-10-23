@@ -18,7 +18,7 @@ const claudeHome = process.env.CLAUDE_HOME || path.join(os.homedir(), '.claude')
 const dbPath = process.env.DB_PATH || path.join(root, 'data', 'usage.sqlite');
 const store = new Store(dbPath);
 const backups = new Backups(store, process.env.BACKUP_DIR || path.join(path.dirname(dbPath), 'backups'), timezone);
-const pricing = new Pricing(store);
+const pricing = new Pricing(store, fetch, async () => { if (currentScan) await currentScan; });
 const importers = { codex: new Importer(store, codexHome), claude: new Importer(store, claudeHome, 15000, async () => {}, { provider: 'claude' }) };
 let currentScan, scanTimer;
 function scanAll() {
@@ -46,10 +46,24 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     const provider = url.searchParams.get('provider') || 'codex';
     if (!Object.hasOwn(importers, provider)) { send(res, 400, { error: 'Choose Claude or ChatGPT.' }); return; }
-    if (req.method === 'POST' && ['/api/refresh', '/api/backup', '/api/pricing/refresh'].includes(url.pathname)) {
+    if (req.method === 'POST' && ['/api/refresh', '/api/backup', '/api/pricing/refresh', '/api/pricing/custom'].includes(url.pathname)) {
       const origin = req.headers.origin;
       if (!req.headers.host || origin && origin !== 'http://' + req.headers.host || !req.headers['content-type']?.startsWith('application/json')) {
         send(res, 403, { error: 'This action must originate from this app.' }); return;
+      }
+      if (url.pathname === '/api/pricing/custom') {
+        try {
+          let body = '';
+          for await (const chunk of req) {
+            body += chunk.toString('utf8');
+            if (Buffer.byteLength(body) > 16384) { send(res, 413, { error: 'The rate settings are too large.' }); return; }
+          }
+          const settings = JSON.parse(body);
+          if (currentScan) await currentScan;
+          pricing.setOverride(provider, settings);
+          send(res, 200, { saved: true });
+        } catch (error) { send(res, 400, { error: error instanceof SyntaxError ? 'Enter valid rate settings.' : error.message }); }
+        return;
       }
       if (url.pathname === '/api/pricing/refresh') {
         try { send(res, 200, await pricing.refresh(provider)); }
@@ -61,8 +75,8 @@ const server = http.createServer(async (req, res) => {
         send(res, 200, await backups.manual());
         return;
       }
-      scanAll().catch(error => console.error('Import failed:', error.message));
-      send(res, 202, { queued: true }); return;
+      await scanAll();
+      send(res, 200, { refreshed: true }); return;
     }
     if (req.method !== 'GET') { send(res, 405, { error: 'Method not allowed.' }); return; }
     if (url.pathname === '/api/health') { send(res, 200, { ok: true, initialized: Object.values(importers).every(importer => importer.status.initialized) }); return; }

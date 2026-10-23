@@ -7,6 +7,7 @@ A local dashboard for Codex and Claude Code token usage, with per-model cost est
 - Per-session, daily, weekly and inclusive custom date ranges, with timezone-aware boundaries.
 - Sortable tables, model/project/search filters, session detail and CSV exports.
 - Input, cached input, cache writes, output and available reasoning counts.
+- A loading overlay with a spinner for opening the dashboard and user-triggered requests. Automatic background updates stay quiet.
 - A **Fetch pricing** button for the selected provider, plus current USD estimates by session, day, week and model. Expand **Model pricing** to inspect rates and the fetch date.
 - Permanent SQLite history, incremental imports and daily integrity-checked backups.
 - No API keys, npm dependencies, transcript database or external frontend resources.
@@ -50,7 +51,7 @@ Fetch pricing reads the official providers' Markdown tables over HTTPS:
 
 No usage data is sent: only a request for the public pricing page. Fetches have a timeout, a size limit and a fixed destination. A failed fetch or unrecognized table preserves saved rates. Prices are stored locally and included in database backups.
 
-Costs apply the latest fetched **standard API list prices** to all selected usage, including historical usage. They are estimates of token value, not subscription charges, historical invoices or allowance percentages. Tools, taxes, special deals, speed tiers, regional processing premiums and other charges are excluded. Unknown models/rates show as unpriced, never a fabricated zero; partial totals display their unpriced-call count. Dated model IDs match their base model rates.
+Costs apply the latest fetched **standard API list prices** to all selected usage, including historical usage. They are estimates of token value, not subscription charges, historical invoices or allowance percentages. Tools, taxes, special deals, speed tiers, regional processing premiums and other charges are excluded. Unknown models/rates show as Unpriced; partial totals display their unpriced-call count. In Model pricing, use Enter rate to optionally save custom USD rates per million tokens. Custom prices are labelled, kept locally in the SQLite database and backups, and preserved when official prices are refreshed. Remove custom rate restores the fetched rate or Unpriced. Leaving an optional cache price blank keeps calls using that cache type unpriced; an explicit zero means no token charge. Custom rates are flat across context lengths. CSV exports leave wholly unpriced cost cells blank and include custom-priced call counts. Dated model IDs match their base model rates.
 
 Per-call estimates use the published long-context tier when available (OpenAI over 272K input tokens; Claude Haiku 5.5 over 100K). Legacy aggregate deltas use short-context rates because individual request lengths are unknown. Claude cache writes use separate five-minute/one-hour prices when logged. An unknown write duration uses the shorter-duration price. Changing prices recalculates estimates without changing saved token counts.
 
@@ -76,4 +77,4 @@ Optional live checks against a running app:
 
     node test/live-check.mjs
 
-GET: /api/health, /api/status, /api/meta, /api/report, /api/export, /api/pricing. POST: /api/refresh, /api/backup, /api/pricing/refresh. Use provider=codex or provider=claude (default codex). Mutation endpoints require application/json and reject foreign Origin headers. No chat-body endpoint exists.
+GET: /api/health, /api/status, /api/meta, /api/report, /api/export, /api/pricing. POST: /api/refresh, /api/backup, /api/pricing/refresh, /api/pricing/custom. Use provider=codex or provider=claude (default codex). Mutation endpoints require application/json and reject foreign Origin headers. No chat-body endpoint exists.

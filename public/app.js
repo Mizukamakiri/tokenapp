@@ -4,7 +4,21 @@ const number = value => new Intl.NumberFormat('en-GB').format(value || 0);
 const compact = value => Math.abs(value || 0) >= 1000000 ? new Intl.NumberFormat('en-GB', { notation: 'compact', maximumFractionDigits: 2 }).format(value) : number(value);
 const percent = (part, total) => total ? (100 * part / total).toFixed(1) + '%' : '0%';
 const usd = value => value == null ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: value > 0 && value < .01 ? 4 : 2 }).format(value);
-const costLabel = row => row.priced_calls ? usd(row.estimated_cost_usd) + (row.unpriced_calls ? ' *' : '') : '—';
+const costLabel = row => row.priced_calls ? usd(row.estimated_cost_usd) + (row.unpriced_calls ? ' *' : '') : row.calls ? 'Unpriced' : '—';
+const loadingTasks = new Map();
+let rateModel, rateProvider;
+function startLoading(label = 'Loading…') {
+  const token = Symbol();
+  loadingTasks.set(token, label);
+  $('loading-text').textContent = label;
+  if (!$('loading-overlay').open) $('loading-overlay').showModal();
+  $('overview').setAttribute('aria-busy', 'true');
+  return () => {
+    loadingTasks.delete(token);
+    if (loadingTasks.size) $('loading-text').textContent = [...loadingTasks.values()].at(-1);
+    else { $('loading-overlay').close(); $('overview').setAttribute('aria-busy', 'false'); }
+  };
+}
 let report;
 let meta;
 let grouping = 'day';
@@ -38,7 +52,7 @@ function message(text) {
   $('message').hidden = !text;
 }
 async function json(url, options) {
-  const response = await fetch(url, options);
+  const response = await fetch(url, { signal: AbortSignal.timeout(60000), ...options });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'The app could not load this data.');
   return result;
@@ -89,7 +103,8 @@ async function loadMeta() {
 function saveFilters() {
   try { localStorage.setItem(stateKey, JSON.stringify({ ...Object.fromEntries(params()), preset, sort: $('sort').value, sortDirection: sessionSortDirection })); } catch { /* Storage is optional. */ }
 }
-async function loadReport() {
+async function loadReport({ silent = false } = {}) {
+  const finish = silent ? () => {} : startLoading('Loading usage…');
   const sequence = ++requestSequence;
   try {
     const query = params().toString();
@@ -101,6 +116,7 @@ async function loadReport() {
     render();
     saveFilters();
   } catch (error) { if (sequence === requestSequence) message(error.message); }
+  finally { finish(); }
 }
 function render() {
   const t = report.totals;
@@ -135,8 +151,8 @@ function render() {
 function renderPricing() {
   const t = report.totals;
   $('estimated-cost').textContent = costLabel(t);
-  $('cost-coverage').textContent = !report.pricing ? 'Fetch pricing to estimate this range.' : t.unpriced_calls ? number(t.unpriced_calls) + ' calls have no matching price; shown cost covers priced calls only.' : number(t.priced_calls) + ' calls priced in this range.';
-  $('pricing-updated').textContent = report.pricing ? 'Fetched ' + timestampLabel(Date.parse(report.pricing.fetched_at)) : 'Not fetched yet';
+  $('cost-coverage').textContent = (!report.pricing ? 'Fetch pricing to estimate this range.' : t.unpriced_calls ? number(t.unpriced_calls) + ' calls are unpriced; shown cost covers priced calls only. You can enter rates under Model pricing.' : number(t.priced_calls) + ' calls priced in this range.') + (t.custom_priced_calls ? ' ' + number(t.custom_priced_calls) + ' use your custom rates.' : '');
+  $('pricing-updated').textContent = report.pricing?.fetched_at ? 'Fetched ' + timestampLabel(Date.parse(report.pricing.fetched_at)) : 'Official prices not fetched';
   $('pricing-basis').textContent = report.pricing?.basis || 'Fetch current model prices from the official documentation. Your usage stays on this machine.';
   $('pricing-source').href = report.pricing?.source || (report.options.provider === 'claude' ? 'https://platform.claude.com/docs/en/about-claude/pricing' : 'https://developers.openai.com/api/docs/pricing');
   $('pricing-rows').replaceChildren();
@@ -144,9 +160,26 @@ function renderPricing() {
     const row = el('tr');
     row.append(el('td', '', model.model));
     for (const key of ['input', 'cached', 'write', 'writeLong', 'output']) row.append(el('td', 'numeric', model.rate?.[key] == null ? '—' : '$' + model.rate[key]));
+    const status = el('td', 'rate-status', model.unpriced_calls ? 'Unpriced' : model.rate?.custom ? 'Custom' : 'Published');
+    if (!model.rate || model.rate.custom || model.unpriced_calls) {
+      const button = el('button', 'button rate-button', model.rate?.custom ? 'Edit rate' : 'Enter rate');
+      button.type = 'button';
+      button.addEventListener('click', () => openRateSettings(model));
+      status.append(button);
+    }
+    row.append(status);
     if (model.rate?.long) row.title = 'Higher rates apply to individual requests over ' + number(model.rate.threshold) + ' input tokens.';
     $('pricing-rows').append(row);
   }
+}
+function openRateSettings(model) {
+  rateModel = model.model;
+  rateProvider = report.options.provider;
+  $('rate-title').textContent = 'Pricing for ' + model.model;
+  $('rate-error').textContent = '';
+  for (const field of ['input', 'cached', 'write', 'writeLong', 'output']) $('rate-' + field).value = model.rate?.custom ? model.rate[field] ?? '' : '';
+  $('reset-rate').hidden = !model.rate?.custom;
+  $('rate-dialog').showModal();
 }
 function renderModels() {
   const container = $('models');
@@ -294,6 +327,8 @@ function renderChart() {
   $('chart-note').textContent = stride > 1 ? 'Bars combine ' + stride + ' ' + (grouping === 'week' ? 'weeks' : 'days') : grouping === 'week' ? 'Weeks start on Monday' : 'Hover a bar for exact counts';
 }
 async function openSession(id) {
+  const finish = startLoading('Loading session…');
+  try {
   const query = params();
   query.set('session', id);
   const result = await json('/api/report?' + query);
@@ -311,7 +346,7 @@ async function openSession(id) {
     item.title = number(value) + ' tokens';
     metrics.append(item);
   }
-  content.append(metrics, el('p', 'detail-explainer', 'Estimated token cost: ' + costLabel(session) + ' USD at current standard API rates.'), el('h3', '', 'Model calls'), el('p', 'detail-explainer', 'Latest ' + result.details.length + ' of ' + number(result.detail_count) + ' recorded calls in the selected range. Times use ' + $('timezone').value + '.'));
+  content.append(metrics, el('p', 'detail-explainer', 'Estimated token cost: ' + costLabel(session) + (session.priced_calls ? ' USD at the selected rates.' : '.')), el('h3', '', 'Model calls'), el('p', 'detail-explainer', 'Latest ' + result.details.length + ' of ' + number(result.detail_count) + ' recorded calls in the selected range. Times use ' + $('timezone').value + '.'));
   const scroll = el('div', 'table-scroll');
   const table = el('table');
   const head = el('thead');
@@ -323,14 +358,17 @@ async function openSession(id) {
     const row = el('tr');
     row.append(el('td', '', timestampLabel(call.timestamp)), el('td', '', call.model));
     for (const field of ['input_tokens', 'cached_input_tokens', 'output_tokens']) row.append(el('td', 'numeric', number(call[field])));
-    row.append(el('td', 'numeric', usd(call.estimated_cost_usd)));
+    row.append(el('td', 'numeric', call.estimated_cost_usd == null ? 'Unpriced' : usd(call.estimated_cost_usd)));
     row.title = ['record', 'claude'].includes(call.source) ? 'Per-call usage record' : 'Usage derived from older log counters';
     body.append(row);
   }
   table.append(head, body); scroll.append(table); content.append(scroll);
   $('session-dialog').showModal();
+  } catch (error) { message(error.message); }
+  finally { finish(); }
 }
 async function poll() {
+  if (loadingTasks.size) { refreshTimer = setTimeout(poll, 3000); return; }
   try {
     const provider = $('provider').value;
     const status = await json('/api/status?provider=' + provider);
@@ -345,7 +383,7 @@ async function poll() {
       lastSignature = signature;
       await loadMeta();
       if (preset) setPreset(preset);
-      await loadReport();
+      await loadReport({ silent: true });
     }
   } catch (error) { $('sync-status').textContent = 'Connection lost'; message(error.message); }
   refreshTimer = setTimeout(poll, 3000);
@@ -360,6 +398,8 @@ function debounce(callback, ms) {
   return () => { clearTimeout(timer); timer = setTimeout(callback, ms); };
 }
 async function boot() {
+  const finishBoot = startLoading('Loading your dashboard…');
+  $('loading-overlay').addEventListener('cancel', event => event.preventDefault());
   try {
     let saved;
     try { saved = JSON.parse(localStorage.getItem(stateKey) || 'null'); } catch { /* Start with defaults. */ }
@@ -379,21 +419,26 @@ async function boot() {
     $('weekly').classList.toggle('selected', grouping === 'week');
     await loadReport();
     $('provider').addEventListener('change', async () => {
+      const finish = startLoading('Switching dashboard…');
+      try {
       ++requestSequence;
       for (const id of ['model', 'project', 'search']) $(id).value = '';
       await loadMeta();
-      await loadReport();
+      await loadReport({ silent: true });
       clearTimeout(refreshTimer);
       await poll();
+      } catch (error) { message(error.message); }
+      finally { finish(); }
     });
     $('fetch-pricing').addEventListener('click', async () => {
       $('fetch-pricing').disabled = true;
       $('fetch-pricing').textContent = 'Fetching…';
+      const finish = startLoading('Fetching model prices…');
       try {
         await json('/api/pricing/refresh?provider=' + $('provider').value, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-        await loadReport();
+        await loadReport({ silent: true });
       } catch (error) { message(error.message); }
-      finally { $('fetch-pricing').disabled = false; $('fetch-pricing').textContent = 'Fetch pricing'; }
+      finally { finish(); $('fetch-pricing').disabled = false; $('fetch-pricing').textContent = 'Fetch pricing'; }
     });
     document.querySelectorAll('[data-preset]').forEach(button => button.addEventListener('click', () => { setPreset(button.dataset.preset); loadReport(); }));
     for (const id of ['from', 'to']) $(id).addEventListener('change', () => {
@@ -403,9 +448,13 @@ async function boot() {
     });
     for (const id of ['model', 'project', 'archived']) $(id).addEventListener('change', loadReport);
     $('timezone').addEventListener('change', async () => {
+      const finish = startLoading('Updating dates…');
+      try {
       await loadMeta();
       if (preset) setPreset(preset);
-      await loadReport();
+      await loadReport({ silent: true });
+      } catch (error) { message(error.message); }
+      finally { finish(); }
     });
     for (const [id, group] of [['daily', 'day'], ['weekly', 'week']]) $(id).addEventListener('click', () => {
       grouping = group;
@@ -436,25 +485,51 @@ async function boot() {
     $('close-dialog').addEventListener('click', () => $('session-dialog').close());
     $('backup-now').addEventListener('click', async () => {
       $('backup-now').disabled = true;
+      const finish = startLoading('Saving a backup…');
       try {
         await json('/api/backup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
         clearTimeout(refreshTimer);
         await poll();
       } catch (error) { message(error.message); }
-      finally { $('backup-now').disabled = false; }
+      finally { finish(); $('backup-now').disabled = false; }
     });
     $('session-dialog').addEventListener('click', event => { if (event.target === $('session-dialog')) { const rect = event.target.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) event.target.close(); } });
     $('refresh').addEventListener('click', async () => {
       $('refresh').disabled = true;
+      const finish = startLoading('Refreshing usage…');
       try {
         await json('/api/refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        await loadMeta();
+        await loadReport({ silent: true });
         clearTimeout(refreshTimer);
         await poll();
       } catch (error) { message(error.message); }
-      finally { $('refresh').disabled = false; }
+      finally { finish(); $('refresh').disabled = false; }
+    });
+    $('close-rate').addEventListener('click', () => $('rate-dialog').close());
+    $('rate-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const finish = startLoading('Saving custom prices…');
+      const rates = Object.fromEntries(['input', 'cached', 'write', 'writeLong', 'output'].map(field => [field, $('rate-' + field).value === '' ? null : Number($('rate-' + field).value)]));
+      try {
+        await json('/api/pricing/custom?provider=' + rateProvider, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: rateModel, rates }) });
+        $('rate-dialog').close();
+        await loadReport({ silent: true });
+      } catch (error) { $('rate-error').textContent = error.message; }
+      finally { finish(); }
+    });
+    $('reset-rate').addEventListener('click', async () => {
+      const finish = startLoading('Removing custom prices…');
+      try {
+        await json('/api/pricing/custom?provider=' + rateProvider, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: rateModel, reset: true }) });
+        $('rate-dialog').close();
+        await loadReport({ silent: true });
+      } catch (error) { $('rate-error').textContent = error.message; }
+      finally { finish(); }
     });
     window.addEventListener('resize', debounce(() => { if (report) renderChart(); }, 100));
     poll();
   } catch (error) { message(error.message); $('sync-status').textContent = 'Could not connect'; }
+  finally { finishBoot(); }
 }
 boot();

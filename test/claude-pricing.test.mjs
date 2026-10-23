@@ -119,3 +119,66 @@ test('pricing refresh retains saved rates on fetch or parser failure and reports
     assert.throws(() => optionsFrom(new URLSearchParams('provider=invalid')), /Choose/);
   } finally { store.close(); }
 });
+
+test('custom model prices stay separate from fetched rates, accept explicit zero, and can be removed', async () => {
+  const store = new Store(':memory:');
+  try {
+    const pricing = new Pricing(store, async () => new Response(claudeMarkdown));
+    store.consumeClaude(assistant(), {}, 's1');
+    const options = optionsFrom(new URLSearchParams('provider=claude'));
+    const originalTokens = getReport(store, options).totals.total_tokens;
+    pricing.setOverride('claude', { model: 'claude-opus-4-8', rates: { input: 0, cached: 0, write: 0, writeLong: 0, output: 0 } });
+    let report = getReport(store, options);
+    assert.equal(report.totals.estimated_cost_usd, 0);
+    assert.equal(report.totals.priced_calls, 1);
+    assert.equal(report.totals.custom_priced_calls, 1);
+    assert.equal(report.models[0].rate.custom, true);
+    await pricing.refresh('claude');
+    assert.equal(pricing.get('claude').rates['claude-opus-4-8'].input, 0);
+    assert.equal(pricing.get('claude').rates['claude-haiku-4-5'].input, 1);
+    assert.equal(new Pricing(store).get('claude').rates['claude-opus-4-8'].custom, true);
+    pricing.setOverride('claude', { model: 'claude-opus-4-8', rates: { input: 2, output: 10 } });
+    report = getReport(store, options);
+    assert.equal(report.totals.unpriced_calls, 1, 'omitted cache rates are unknown, not free');
+    assert.equal(report.totals.custom_priced_calls, 0);
+    pricing.setOverride('claude', { model: 'claude-opus-4-8', reset: true });
+    report = getReport(store, options);
+    assert.equal(report.models[0].rate.custom, undefined);
+    assert.equal(report.models[0].rate.input, 5);
+    assert.equal(report.totals.custom_priced_calls, 0);
+    assert.equal(report.totals.total_tokens, originalTokens);
+  } finally { store.close(); }
+});
+
+test('custom price validation rejects invalid values and keeps providers and unknown models separate', () => {
+  const store = new Store(':memory:');
+  try {
+    const pricing = new Pricing(store);
+    for (const bad of [-1, NaN, Infinity, '2', null]) assert.throws(() => pricing.setOverride('codex', { model: 'test', rates: { input: bad, output: 1 } }), /rates/);
+    assert.throws(() => pricing.setOverride('constructor', { model: 'test', rates: { input: 1, output: 1 } }), /Choose/);
+    assert.throws(() => pricing.setOverride('codex', { model: '', rates: { input: 1, output: 1 } }), /model/);
+    pricing.setOverride('codex', { model: 'test-2026-10-22', rates: { input: 2, output: 10 } });
+    assert.equal(pricing.get('claude'), null);
+    assert.equal(pricing.get('codex').rates.test.input, 2);
+    assert.equal(estimateCost({ model: 'missing', input_tokens: 1, output_tokens: 1 }, pricing.get('codex')), null);
+    assert.equal(estimateCost({ model: 'constructor', input_tokens: 1, output_tokens: 1 }, pricing.get('codex')), null);
+    pricing.setOverride('codex', { model: 'test', reset: true });
+    assert.equal(pricing.get('codex'), null);
+  } finally { store.close(); }
+});
+
+test('pricing waits for the importer to finish before writing to the shared database', async () => {
+  const store = new Store(':memory:');
+  try {
+    let release, entered;
+    const waiting = new Promise(resolve => { entered = resolve; });
+    const gate = new Promise(resolve => { release = resolve; });
+    const pricing = new Pricing(store, async () => new Response(claudeMarkdown), async () => { entered(); await gate; });
+    const refresh = pricing.refresh('claude');
+    await waiting;
+    assert.equal(pricing.get('claude'), null);
+    release();
+    await refresh;
+    assert.equal(pricing.get('claude').rates['claude-opus-4-8'].input, 5);
+  } finally { store.close(); }
+});
