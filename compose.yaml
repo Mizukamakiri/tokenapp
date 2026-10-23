@@ -1,0 +1,45 @@
+name: tokenapp
+services:
+  tokenapp:
+    build: .
+    container_name: tokenapp
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Helsinki}
+      SCAN_INTERVAL_MS: 15000
+      CLAUDE_HOME: /claude
+    volumes:
+      - ./data:/app/data
+      - type: bind
+        source: ${CODEX_DATA_HOME:?Set CODEX_DATA_HOME in .env}/sessions
+        target: /codex/sessions
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CODEX_DATA_HOME}/archived_sessions
+        target: /codex/archived_sessions
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CODEX_DATA_HOME}/session_index.jsonl
+        target: /codex/session_index.jsonl
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CLAUDE_DATA_HOME:?Set CLAUDE_DATA_HOME in .env}/projects
+        target: /claude/projects
+        read_only: true
+        bind:
+          create_host_path: false
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
