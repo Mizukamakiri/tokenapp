@@ -5,6 +5,7 @@ const compact = value => Math.abs(value || 0) >= 1000000 ? new Intl.NumberFormat
 const percent = (part, total) => total ? (100 * part / total).toFixed(1) + '%' : '0%';
 const usd = value => value == null ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: value > 0 && value < .01 ? 4 : 2 }).format(value);
 const costLabel = row => row.priced_calls ? usd(row.estimated_cost_usd) + (row.unpriced_calls ? ' *' : '') : row.calls ? 'Unpriced' : '—';
+const providerLabel = provider => ({ all: 'All', codex: 'ChatGPT', claude: 'Claude' })[provider] || provider;
 const loadingTasks = new Map();
 let rateModel, rateProvider;
 function startLoading(label = 'Loading…') {
@@ -121,8 +122,9 @@ async function loadReport({ silent = false } = {}) {
 function render() {
   const t = report.totals;
   const claude = report.options.provider === 'claude';
-  $('provider-caption').textContent = claude ? 'CLAUDE · CODE' : 'CHATGPT · CODEX';
-  $('provider-note').textContent = claude ? 'Local Claude Code sessions, including subagents' : 'Local Codex sessions';
+  const combined = report.options.provider === 'all';
+  $('provider-caption').textContent = combined ? 'CHATGPT + CLAUDE' : claude ? 'CLAUDE · CODE' : 'CHATGPT · CODEX';
+  $('provider-note').textContent = combined ? 'Local Codex and Claude Code sessions' : claude ? 'Local Claude Code sessions, including subagents' : 'Local Codex sessions';
   $('total-tokens').textContent = compact(t.total_tokens);
   $('total-exact').textContent = number(t.total_tokens) + ' tokens · input + output';
   $('input-tokens').textContent = compact(t.input_tokens);
@@ -132,7 +134,7 @@ function render() {
   $('session-count').textContent = number(t.sessions);
   $('call-count').textContent = number(t.calls) + ' recorded model calls';
   $('cache-summary').textContent = percent(t.cached_input_tokens, t.input_tokens) + ' cached · ' + compact(t.cached_input_tokens) + ' tokens';
-  $('reasoning-summary').textContent = claude ? 'Includes thinking · no separate token count recorded' : percent(t.reasoning_output_tokens, t.output_tokens) + ' reasoning · ' + compact(t.reasoning_output_tokens);
+  $('reasoning-summary').textContent = combined ? compact(t.reasoning_output_tokens) + ' Codex reasoning · Claude count unavailable' : claude ? 'Includes thinking · no separate token count recorded' : percent(t.reasoning_output_tokens, t.output_tokens) + ' reasoning · ' + compact(t.reasoning_output_tokens);
   const from = report.options.from || meta.first;
   const to = report.options.to || meta.last;
   $('range-label').textContent = from && to ? dateLabel(from) + ' — ' + dateLabel(to) : 'All recorded activity';
@@ -152,13 +154,23 @@ function renderPricing() {
   const t = report.totals;
   $('estimated-cost').textContent = costLabel(t);
   $('cost-coverage').textContent = (!report.pricing ? 'Fetch pricing to estimate this range.' : t.unpriced_calls ? number(t.unpriced_calls) + ' calls are unpriced; shown cost covers priced calls only. You can enter rates under Model pricing.' : number(t.priced_calls) + ' calls priced in this range.') + (t.custom_priced_calls ? ' ' + number(t.custom_priced_calls) + ' use your custom rates.' : '');
-  $('pricing-updated').textContent = report.pricing?.fetched_at ? 'Fetched ' + timestampLabel(Date.parse(report.pricing.fetched_at)) : 'Official prices not fetched';
+  $('pricing-updated').textContent = report.options.provider === 'all' ? 'Prices by provider below' : report.pricing?.fetched_at ? 'Fetched ' + timestampLabel(Date.parse(report.pricing.fetched_at)) : 'Official prices not fetched';
   $('pricing-basis').textContent = report.pricing?.basis || 'Fetch current model prices from the official documentation. Your usage stays on this machine.';
-  $('pricing-source').href = report.pricing?.source || (report.options.provider === 'claude' ? 'https://platform.claude.com/docs/en/about-claude/pricing' : 'https://developers.openai.com/api/docs/pricing');
+  const selected = report.options.provider === 'all' ? ['codex', 'claude'] : [report.options.provider];
+  $('pricing-sources').replaceChildren();
+  for (const provider of selected) {
+    const source = report.pricing?.sources?.find(item => item.provider === provider);
+    const link = el('a', '', providerLabel(provider) + ' official prices');
+    link.href = source?.source || (provider === 'claude' ? 'https://platform.claude.com/docs/en/about-claude/pricing' : 'https://developers.openai.com/api/docs/pricing');
+    link.target = '_blank'; link.rel = 'noreferrer';
+    const item = el('span', 'provider-price-source');
+    item.append(link, document.createTextNode(source?.fetched_at ? ' · fetched ' + timestampLabel(Date.parse(source.fetched_at)) : ' · not fetched'));
+    $('pricing-sources').append(item);
+  }
   $('pricing-rows').replaceChildren();
   for (const model of report.models) {
     const row = el('tr');
-    row.append(el('td', '', model.model));
+    row.append(el('td', '', (report.options.provider === 'all' ? providerLabel(model.provider) + ' · ' : '') + model.model));
     for (const key of ['input', 'cached', 'write', 'writeLong', 'output']) row.append(el('td', 'numeric', model.rate?.[key] == null ? '—' : '$' + model.rate[key]));
     const status = el('td', 'rate-status', model.unpriced_calls ? 'Unpriced' : model.rate?.custom ? 'Custom' : 'Published');
     if (!model.rate || model.rate.custom || model.unpriced_calls) {
@@ -174,8 +186,8 @@ function renderPricing() {
 }
 function openRateSettings(model) {
   rateModel = model.model;
-  rateProvider = report.options.provider;
-  $('rate-title').textContent = 'Pricing for ' + model.model;
+  rateProvider = model.provider || report.options.provider;
+  $('rate-title').textContent = 'Pricing for ' + providerLabel(rateProvider) + ' · ' + model.model;
   $('rate-error').textContent = '';
   for (const field of ['input', 'cached', 'write', 'writeLong', 'output']) $('rate-' + field).value = model.rate?.custom ? model.rate[field] ?? '' : '';
   $('reset-rate').hidden = !model.rate?.custom;
@@ -188,8 +200,9 @@ function renderModels() {
   for (const model of report.models) {
     const row = el('div', 'model-row');
     const caption = el('div', 'model-caption');
-    const label = el('span', '', model.model);
-    label.title = model.model;
+    const modelLabel = (report.options.provider === 'all' ? providerLabel(model.provider) + ' · ' : '') + model.model;
+    const label = el('span', '', modelLabel);
+    label.title = modelLabel;
     caption.append(label, el('span', '', compact(model.total_tokens) + ' · ' + costLabel(model)));
     const track = el('div', 'model-track');
     const fill = el('div');
@@ -234,7 +247,7 @@ function renderSessions() {
     button.type = 'button';
     button.title = session.title;
     button.addEventListener('click', () => openSession(session.id));
-    const subtitle = el('div', 'session-subtitle', session.project + ' · ' + session.models.join(', '));
+    const subtitle = el('div', 'session-subtitle', (report.options.provider === 'all' ? providerLabel(session.provider) + ' · ' : '') + session.project + ' · ' + session.models.join(', '));
     subtitle.title = session.cwd;
     if (session.archived) subtitle.append(el('span', 'tag', 'archived'));
     if (!session.source_available) subtitle.append(el('span', 'tag', 'saved history'));
@@ -242,7 +255,7 @@ function renderSessions() {
     row.append(titleCell, el('td', '', timestampLabel(session.last)), el('td', 'numeric', number(session.input_tokens)),
       el('td', 'numeric', number(session.cached_input_tokens)));
     const output = el('td', 'numeric', number(session.output_tokens));
-    if (report.options.provider !== 'claude') output.append(el('span', 'cell-secondary', number(session.reasoning_output_tokens) + ' reasoning'));
+    if (session.provider !== 'claude') output.append(el('span', 'cell-secondary', number(session.reasoning_output_tokens) + ' reasoning'));
     row.append(output, el('td', 'numeric total-cell', number(session.total_tokens)), el('td', 'numeric', costLabel(session)));
     rows.append(row);
   }
@@ -338,7 +351,7 @@ async function openSession(id) {
   const content = $('detail-content');
   content.replaceChildren();
   content.append(el('div', 'detail-meta', session.cwd), el('div', 'detail-meta', 'Session ' + session.id),
-    el('div', 'detail-meta', session.models.join(' · ') + ' · ' + number(session.calls) + ' recorded calls' + (session.archived ? ' · Archived' : '')));
+    el('div', 'detail-meta', providerLabel(session.provider) + ' · ' + session.models.join(' · ') + ' · ' + number(session.calls) + ' recorded calls' + (session.archived ? ' · Archived' : '')));
   const metrics = el('div', 'detail-metrics');
   for (const [label, value] of [['Input', session.input_tokens], ['Cached input', session.cached_input_tokens], ['Output', session.output_tokens], ['Cache writes', session.cache_write_input_tokens]]) {
     const item = el('div', 'detail-metric');
@@ -373,17 +386,19 @@ async function poll() {
     const provider = $('provider').value;
     const status = await json('/api/status?provider=' + provider);
     if (provider !== $('provider').value) return;
-    $('sync-status').textContent = status.running ? 'Importing ' + status.processed + ' / ' + status.files : status.lastScan ? 'Updated ' + new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(new Date(status.lastScan)) : 'Waiting for logs';
+    $('sync-status').textContent = status.running ? provider === 'all' ? 'Updating sources…' : 'Importing ' + status.processed + ' / ' + status.files : status.lastScan ? 'Updated ' + new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(new Date(status.lastScan)) : 'Waiting for logs';
     $('import-summary').textContent = number(status.files) + ' source files (' + number(status.compressedFiles) + ' compressed) · ' + (status.running ? 'scan in progress' : status.lastScan ? 'last scan ' + timestampLabel(Date.parse(status.lastScan)) : 'first scan pending');
     $('import-errors').textContent = status.errors.slice(0, 4).join(' · ');
     $('backup-summary').textContent = status.backups?.error ? 'Backup failed: ' + status.backups.error :
       status.backups?.lastBackup ? 'Daily backups enabled · last saved ' + timestampLabel(Date.parse(status.backups.lastBackup)) : 'First backup pending.';
-    const signature = [provider, status.lastScan, status.running ? Math.floor(status.processed / 20) : 'done'].join(':');
-    if (signature !== lastSignature) {
+    const signature = [provider, status.revision || status.lastScan, status.running ? Math.floor(status.processed / 20) : 'done'].join(':');
+    if (signature !== lastSignature && !loadingTasks.size) {
       lastSignature = signature;
       await loadMeta();
-      if (preset) setPreset(preset);
-      await loadReport({ silent: true });
+      if (!loadingTasks.size) {
+        if (preset) setPreset(preset);
+        await loadReport({ silent: true });
+      }
     }
   } catch (error) { $('sync-status').textContent = 'Connection lost'; message(error.message); }
   refreshTimer = setTimeout(poll, 3000);
@@ -404,7 +419,7 @@ async function boot() {
     let saved;
     try { saved = JSON.parse(localStorage.getItem(stateKey) || 'null'); } catch { /* Start with defaults. */ }
     if (saved?.timezone && [...$('timezone').options].some(option => option.value === saved.timezone)) $('timezone').value = saved.timezone;
-    if (saved?.provider === 'claude') $('provider').value = 'claude';
+    if (['all', 'claude', 'codex'].includes(saved?.provider)) $('provider').value = saved.provider;
     await loadMeta();
     if (saved) {
       for (const key of ['from', 'to', 'model', 'project', 'search']) if (saved[key] != null) $(key).value = saved[key];
@@ -435,8 +450,9 @@ async function boot() {
       $('fetch-pricing').textContent = 'Fetching…';
       const finish = startLoading('Fetching model prices…');
       try {
-        await json('/api/pricing/refresh?provider=' + $('provider').value, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const result = await json('/api/pricing/refresh?provider=' + $('provider').value, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
         await loadReport({ silent: true });
+        if (result.partial) message('Some prices were updated. ' + result.providers.filter(item => !item.ok).map(item => providerLabel(item.provider) + ': ' + item.error).join(' · '));
       } catch (error) { message(error.message); }
       finally { finish(); $('fetch-pricing').disabled = false; $('fetch-pricing').textContent = 'Fetch pricing'; }
     });

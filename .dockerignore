@@ -11,3 +11,10 @@ test
 backups
 logs
 .env.*
+.agents
+.specify
+.codex
+specs
+docs
+AGENTS.md
+coverage

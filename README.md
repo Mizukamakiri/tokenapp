@@ -1,9 +1,10 @@
 # Tokenapp
 
-A local dashboard for Codex and Claude Code token usage, with per-model cost estimates. Choose **ChatGPT** or **Claude** at the top to switch sources. The ChatGPT view reads local Codex sessions; ordinary ChatGPT and Claude web chats are not imported.
+A local dashboard for Codex and Claude Code token usage, with per-model cost estimates. Choose **All**, **ChatGPT** or **Claude** at the top. All combines recorded tokens, costs, chart periods and sessions from both providers. The ChatGPT view reads local Codex sessions; ordinary ChatGPT and Claude web chats are not imported.
 
 ## Features
 
+- Combined and individual provider views with provider-specific prices and labelled mixed rows.
 - Per-session, daily, weekly and inclusive custom date ranges, with timezone-aware boundaries.
 - Sortable tables, model/project/search filters, session detail and CSV exports.
 - Input, cached input, cache writes, output and available reasoning counts.
@@ -44,6 +45,8 @@ Day and Monday-based week boundaries use the selected timezone, including daylig
 
 ## Pricing
 
+In All, Fetch pricing refreshes both providers independently and reports any partial failure while retaining saved rates. Custom-rate edits always belong to the model row's concrete provider.
+
 Fetch pricing reads the official providers' Markdown tables over HTTPS:
 
 - https://developers.openai.com/api/docs/pricing
@@ -77,4 +80,15 @@ Optional live checks against a running app:
 
     node test/live-check.mjs
 
-GET: /api/health, /api/status, /api/meta, /api/report, /api/export, /api/pricing. POST: /api/refresh, /api/backup, /api/pricing/refresh, /api/pricing/custom. Use provider=codex or provider=claude (default codex). Mutation endpoints require application/json and reject foreign Origin headers. No chat-body endpoint exists.
+GET: /api/health, /api/status, /api/meta, /api/report, /api/export, /api/pricing. POST: /api/refresh, /api/backup, /api/pricing/refresh, /api/pricing/custom. Use provider=all, provider=codex or provider=claude (default codex). Custom-rate mutations require a concrete provider. Combined CSV sessions identify their actual provider; period rows use all and include a provider pricing-timestamp map. Mutation endpoints require application/json and reject foreign Origin headers. No chat-body endpoint exists.
+
+## Engineering workflow
+
+Spec-Kit 1.1.1 is initialized locally for Codex in .agents/skills/ and .specify/. The application runs independently of this tooling.
+
+- [Project constitution](.specify/memory/constitution.md) defines accounting, privacy, pricing and verification rules.
+- [Product baseline](docs/product-baseline.md) distinguishes existing capabilities from new work.
+- [Architecture](docs/architecture.md) describes data flow and module boundaries.
+- [Combined-view specification](specs/001-combined-provider-view/spec.md), plan, tasks and validation record keep requirements and evidence together.
+
+Run specify integration status --json to verify the local setup. Open this repository as the Codex project to discover the installed $speckit-constitution, $speckit-specify, $speckit-plan, $speckit-tasks and $speckit-implement skills. Restart/reopen the project if a running client has not discovered them. Future changes start with written acceptance criteria and failing tests for accounting contracts; run npm test and the relevant live/browser checks before release.

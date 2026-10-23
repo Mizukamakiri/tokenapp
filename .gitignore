@@ -13,3 +13,12 @@ backups/
 *.partial
 *.tmp
 compose.override.yaml
+.agents/*
+!.agents/skills/
+.codex/
+dist/
+build/
+coverage/
+.DS_Store
+Thumbs.db
+*.swp

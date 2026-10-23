@@ -18,14 +18,14 @@
       <a class="nav-link" href="#sessions"><span aria-hidden="true">≡</span> Sessions</a>
       <a class="nav-link" href="#data-notes"><span aria-hidden="true">ⓘ</span> About the data</a>
     </nav>
-    <div class="rail-bottom"><span class="local-light"></span> Runs on your machine<p>Usage metadata stays local.<br>Session logs are read only.</p><span class="version">TOKENAPP / V1.1</span></div>
+    <div class="rail-bottom"><span class="local-light"></span> Runs on your machine<p>Usage metadata stays local.<br>Session logs are read only.</p><span class="version">TOKENAPP / V1.2</span></div>
   </aside>
   <main id="overview" aria-busy="true">
     <header class="page-header">
       <div><div class="eyebrow">PERSONAL ANALYTICS <span>/</span> <span id="provider-caption">CHATGPT · CODEX</span></div><h1>Usage overview<span>.</span></h1><p class="subtitle">A clear view of the tokens behind your work.</p></div>
       <div class="header-actions"><span id="sync-status" class="sync-status" role="status">Connecting…</span><button id="refresh" class="button subtle" type="button">↻ Refresh</button></div>
     </header>
-    <div class="provider-bar"><label for="provider">Show usage for</label><select id="provider"><option value="codex">ChatGPT</option><option value="claude">Claude</option></select><span id="provider-note">Local Codex sessions</span></div>
+    <div class="provider-bar"><label for="provider">Show usage for</label><select id="provider"><option value="all">All</option><option value="codex" selected>ChatGPT</option><option value="claude">Claude</option></select><span id="provider-note">Local Codex sessions</span></div>
     <div id="message" class="message" role="alert" hidden></div>
     <section class="filters panel" aria-label="Usage filters">
       <div class="filter-top"><div class="presets" role="group" aria-label="Date range"><button data-preset="today">Today</button><button data-preset="week">This week</button><button data-preset="month">This month</button><button data-preset="30" class="selected">Last 30 days</button><button data-preset="all">All time</button></div><label class="timezone-label"><span>Timezone</span><select id="timezone" aria-label="Timezone"><option>Europe/Helsinki</option><option>UTC</option><option>Europe/Lisbon</option><option>America/New_York</option></select></label></div>
@@ -44,7 +44,7 @@
       <article class="metric panel"><div class="metric-label">ACTIVE SESSIONS <span>◫</span></div><div id="session-count" class="metric-value">—</div><div id="call-count" class="metric-detail">— model calls</div><div class="metric-footer">With usage in this range</div></article>
     </section>
     <section class="cost-strip panel" aria-label="Estimated token cost"><div><div class="eyebrow">ESTIMATED TOKEN COST · USD</div><strong id="estimated-cost">—</strong><span id="cost-coverage">Fetch pricing to estimate this range.</span><p>At current standard API rates. Subscription charges and tool fees are excluded.</p></div><button id="fetch-pricing" class="button" type="button">Fetch pricing</button></section>
-    <details class="panel pricing-panel"><summary>Model pricing <span id="pricing-updated">Not fetched yet</span></summary><p id="pricing-basis">Prices are fetched from official OpenAI and Anthropic documentation. Your usage stays on this machine.</p><div class="table-scroll"><table><thead><tr><th>Model in this range</th><th class="numeric">Input</th><th class="numeric">Cached input</th><th class="numeric">Cache write</th><th class="numeric">Long cache write</th><th class="numeric">Output</th><th>Status</th></tr></thead><tbody id="pricing-rows"></tbody></table></div><p class="pricing-source">USD per million tokens · <a id="pricing-source" target="_blank" rel="noreferrer">Official pricing source</a></p></details>
+    <details class="panel pricing-panel"><summary>Model pricing <span id="pricing-updated">Not fetched yet</span></summary><p id="pricing-basis">Prices are fetched from official OpenAI and Anthropic documentation. Your usage stays on this machine.</p><div class="table-scroll"><table><thead><tr><th>Model in this range</th><th class="numeric">Input</th><th class="numeric">Cached input</th><th class="numeric">Cache write</th><th class="numeric">Long cache write</th><th class="numeric">Output</th><th>Status</th></tr></thead><tbody id="pricing-rows"></tbody></table></div><p class="pricing-source">USD per million tokens · <span id="pricing-sources">Official pricing sources</span></p></details>
     <section class="activity-grid">
       <article class="panel activity-panel">
         <div class="section-heading"><div><div class="eyebrow">THE BIG PICTURE</div><h2>Token activity</h2></div><div class="chart-controls"><select id="chart-metric" aria-label="Chart token category"><option value="total_tokens">All tokens</option><option value="input_tokens">Input</option><option value="output_tokens">Output</option></select><div class="segmented" role="group" aria-label="Activity grouping"><button id="daily" class="selected" type="button">Daily</button><button id="weekly" type="button">Weekly</button></div></div></div>

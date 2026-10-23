@@ -7,6 +7,7 @@ import { Store } from './lib/store.mjs';
 import { Importer } from './lib/importer.mjs';
 import { Backups } from './lib/backups.mjs';
 import { Pricing } from './lib/pricing.mjs';
+import { selectedProviders, importStatus } from './lib/providers.mjs';
 import { getReport, metadata, optionsFrom, reportCsv } from './lib/report.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
@@ -45,13 +46,16 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
     const provider = url.searchParams.get('provider') || 'codex';
-    if (!Object.hasOwn(importers, provider)) { send(res, 400, { error: 'Choose Claude or ChatGPT.' }); return; }
+    let providers;
+    try { providers = selectedProviders(provider); }
+    catch (error) { send(res, 400, { error: error.message }); return; }
     if (req.method === 'POST' && ['/api/refresh', '/api/backup', '/api/pricing/refresh', '/api/pricing/custom'].includes(url.pathname)) {
       const origin = req.headers.origin;
       if (!req.headers.host || origin && origin !== 'http://' + req.headers.host || !req.headers['content-type']?.startsWith('application/json')) {
         send(res, 403, { error: 'This action must originate from this app.' }); return;
       }
       if (url.pathname === '/api/pricing/custom') {
+        if (provider === 'all') { send(res, 400, { error: 'Choose the model row’s provider when entering a rate.' }); return; }
         try {
           let body = '';
           for await (const chunk of req) {
@@ -66,6 +70,11 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (url.pathname === '/api/pricing/refresh') {
+        if (provider === 'all') {
+          const result = await pricing.refreshAll();
+          send(res, result.ok ? 200 : 502, { ...result, ...(!result.ok && { error: result.providers.map(item => item.provider + ': ' + item.error).join(' · ') }) });
+          return;
+        }
         try { send(res, 200, await pricing.refresh(provider)); }
         catch (error) { send(res, 502, { error: error.message }); }
         return;
@@ -80,8 +89,8 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method !== 'GET') { send(res, 405, { error: 'Method not allowed.' }); return; }
     if (url.pathname === '/api/health') { send(res, 200, { ok: true, initialized: Object.values(importers).every(importer => importer.status.initialized) }); return; }
-    if (url.pathname === '/api/status') { send(res, 200, { ...importers[provider].status, backups: backups.status }); return; }
-    if (url.pathname === '/api/pricing') { send(res, 200, pricing.get(provider)); return; }
+    if (url.pathname === '/api/status') { send(res, 200, { ...importStatus(importers, provider, !!currentScan), backups: backups.status }); return; }
+    if (url.pathname === '/api/pricing') { send(res, 200, provider === 'all' ? { provider, providers: Object.fromEntries(providers.map(value => [value, pricing.get(value)])) } : pricing.get(provider)); return; }
     if (url.pathname === '/api/meta') { send(res, 200, metadata(store, url.searchParams.get('timezone') || timezone, provider)); return; }
     if (url.pathname === '/api/report' || url.pathname === '/api/export') {
       let options;
