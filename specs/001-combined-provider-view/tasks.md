@@ -50,7 +50,7 @@ Goal: The installed workflow and source are maintainable. Independent test: setu
 ## Phase 7: Polish and release
 
 - [X] T019 Run npm test, the live guide and browser checks; record results per requirement in specs/001-combined-provider-view/validation.md (FR-001..011).
-- [ ] T020 Review private-data exclusions and Spec-Kit health, deploy the verified revision, publish source and verify Windows/Linux CI; update tasks.md and spec.md (FR-010, FR-011).
+- [X] T020 Review private-data exclusions and Spec-Kit health, deploy the verified revision, publish source and verify Windows/Linux CI; update tasks.md and spec.md (FR-010, FR-011).
 
 ## Dependencies and execution order
 

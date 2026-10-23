@@ -3,7 +3,7 @@
 **Date**: 2026-10-23
 
 **Application version**: 1.2.0
-**Status**: Local implementation and deployment verified; GitHub publication checks pending.
+**Status**: Complete - local deployment, private source publication and GitHub checks verified.
 
 ## Executed checks
 
@@ -45,10 +45,10 @@
 | FR-008 | Browser reload retains All; successful, partial-failure and total-failure requests clear loading feedback. | Pass |
 | FR-009 | Aggregate status tests cover incomplete initial scans, provider errors, timestamps and revision changes; empty-provider reports retain available usage. | Pass |
 | FR-010 | Synthetic before/after event comparison; unchanged store/importer/backup implementation; existing retention, deduplication and backup tests pass. Read-only source mounts, loopback binding and tracked-content exclusions verified. | Pass |
-| FR-011 | Healthy project-local Codex integration; constitution, baseline, architecture, specification, design, tasks and this requirement record exist. | Pass locally |
+| FR-011 | Healthy project-local Codex integration; constitution, baseline, architecture, specification, design, completed tasks and this requirement record are published. | Pass |
 
-These checks satisfy SC-001 through SC-005 locally. GitHub checks are a separate release
-gate, not implied by local test success.
+These checks satisfy SC-001 through SC-005. GitHub checks passed separately as recorded
+below; their result is not inferred from local test success.
 
 ## Failures found and corrected
 
@@ -73,5 +73,11 @@ with new feature evidence kept in this directory.
 
 The local Docker service has been rebuilt and the changed flows verified against it.
 Docker reports the service healthy at `127.0.0.1:8787`; all source mounts are read only,
-with only the durable data directory writable. Publication to the existing private
-repository and the Windows/Linux GitHub Actions result remain pending.
+with only the durable data directory writable. Hashes of all changed runtime files match
+the deployed image.
+
+Source revision `65837cb52dad5d11259d204265b28b702eb34223` was published to the existing
+private repository. [GitHub Actions run 39916366145](https://github.com/Mizukamakiri/tokenapp/actions/runs/39916366145)
+completed successfully on Windows and Ubuntu. Both jobs ran the complete 37-test suite.
+The final follow-up commit only closes this documentation and task record; runtime source
+is unchanged, so it does not require a repeat test run.

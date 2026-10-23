@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-23
 
-**Status**: Implemented and locally validated; publication checks pending
+**Status**: Complete - deployed, published and validated
 
 **Input**: Add an All option alongside Claude and ChatGPT to see combined tokens and
 costs, including the existing chart. Activate project-local Spec-Kit and establish an
